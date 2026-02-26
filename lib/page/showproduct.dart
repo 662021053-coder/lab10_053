@@ -1,23 +1,11 @@
 // ================== IMPORT LIBRARIES ==================
-
-// ใช้สำหรับ HttpHeaders เช่น Authorization
 import 'dart:io';
-
-// ใช้สำหรับแปลง JSON (jsonDecode / jsonEncode)
 import 'dart:convert';
-
-// เรียกใช้ Widget พื้นฐานของ Flutter
 import 'package:flutter/material.dart';
-
-// เรียกใช้โมเดล BookModel (ตรวจสอบตัวพิมพ์เล็ก/ใหญ่ให้ตรงกับไฟล์จริง)
 import 'package:lab10_053/models/BookModel.dart';
-
-// ใช้ส่ง HTTP Request ไปยัง API
 import 'package:http/http.dart' as http;
-
-// ใช้เก็บข้อมูลในเครื่อง เช่น token login
+import 'package:lab10_053/page/add_product.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 
 // ================== STATEFUL WIDGET ==================
 
@@ -28,112 +16,108 @@ class Showproducts extends StatefulWidget {
   State<Showproducts> createState() => _ShowproductsState();
 }
 
-
 // ================== STATE CLASS ==================
 
 class _ShowproductsState extends State<Showproducts> {
-
-  // เก็บรายการหนังสือทั้งหมด
   List<BookModel> books = [];
-
-  // ใช้ตรวจสอบสถานะกำลังโหลดข้อมูล
   bool isLoading = true;
 
-  // เรียกทำงานทันทีเมื่อหน้าเปิด
   @override
   void initState() {
     super.initState();
-    getList(); // โหลดข้อมูลจาก API
+    getList();
   }
 
+  // ================== LOGOUT ==================
 
-  // ================== LOGOUT FUNCTION ==================
-
-  Future<void> _logout() async {
+ Future<void> _logout() async {
+  try {
     final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString("token");
 
-    // ลบข้อมูลทั้งหมดในเครื่อง (เช่น token)
-    await prefs.clear();
+    // 🔥 ใช้เซิร์ฟเวอร์เดียวกับ login
+    final url = Uri.parse("http://10.0.2.2:3000/api/auth/logout");
 
-    // ตรวจสอบว่า widget ยังอยู่ในหน้าจอ
-    if (mounted) {
-      // กลับไปหน้า Login และไม่สามารถกดย้อนกลับได้
-      Navigator.pushReplacementNamed(context, '/login');
+    final response = await http.post(
+      url,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    // ถ้า logout สำเร็จ
+    if (response.statusCode == 200) {
+      prefs.remove("token");
     }
-  }
 
+    // ไปหน้า login
+    Navigator.pushReplacementNamed(context, '/login');
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Logout Error: $e")),
+    );
+  }
+}
 
   // ================== BUILD UI ==================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-
-      // ---------- APP BAR ----------
       appBar: AppBar(
         title: const Text(
-          'BOOK DATABASE',
-          style: TextStyle(
-            letterSpacing: 2.0,
-            fontWeight: FontWeight.bold,
-          ),
+          'รายการหนังสือ',
+          style: TextStyle(letterSpacing: 2.0, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
         backgroundColor: const Color(0xFF020A06),
         foregroundColor: const Color.fromARGB(255, 255, 81, 0),
         elevation: 0,
 
-        // ปุ่ม Logout ด้านขวา
         actions: [
           IconButton(
             onPressed: _logout,
-            icon: const Icon(Icons.logout_rounded),
-          )
+            icon: const Icon(Icons.logout, color: Colors.redAccent),
+          ),
         ],
       ),
 
-      // ---------- BODY ----------
       body: Container(
-
-        // ทำพื้นหลังแบบไล่สี Gradient
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF020A06),
-              Color(0xFF04130C),
-              Color(0xFF020A06),
-            ],
+            colors: [Color(0xFF020A06), Color(0xFF04130C), Color(0xFF020A06)],
           ),
         ),
-
-        // ใช้ RefreshIndicator เพื่อดึงลงรีเฟรชได้
         child: RefreshIndicator(
           color: const Color.fromARGB(255, 255, 81, 0),
           backgroundColor: const Color(0xFF020A06),
-
-          // เมื่อดึงลงจะเรียก getList()
           onRefresh: getList,
-
-          // ตรวจสอบสถานะการโหลด
           child: isLoading
               ? const Center(
-                  // แสดงวงโหลด
-                  child: CircularProgressIndicator(
-                    color: Color(0xFF00FF88),
-                  ),
+                  child: CircularProgressIndicator(color: Color(0xFF00FF88)),
                 )
               : books.isEmpty
-                  ? _buildNoDataView()   // ถ้าไม่มีข้อมูล
-                  : _buildBookList(),   // ถ้ามีข้อมูล
+              ? _buildNoDataView()
+              : _buildBookList(),
         ),
+      ),
+
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const AddProductpage()),
+          ).then((value) => getList());
+        },
+        child: const Icon(Icons.add),
       ),
     );
   }
 
-
-  // ================== NO DATA VIEW ==================
+  // ================== NO DATA ==================
 
   Widget _buildNoDataView() {
     return ListView(
@@ -142,43 +126,34 @@ class _ShowproductsState extends State<Showproducts> {
         const Center(
           child: Text(
             'NO DATA FOUND',
-            style: TextStyle(
-              color: Color(0xFF00FF88),
-              letterSpacing: 1.5,
-            ),
+            style: TextStyle(color: Color(0xFF00FF88), letterSpacing: 1.5),
           ),
         ),
       ],
     );
   }
 
-
-  // ================== BOOK LIST VIEW ==================
+  // ================== BOOK LIST ==================
 
   Widget _buildBookList() {
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      itemCount: books.length, // จำนวนหนังสือทั้งหมด
-
+      itemCount: books.length,
       itemBuilder: (context, index) {
-        final book = books[index]; // ดึงข้อมูลแต่ละเล่ม
+        final book = books[index];
 
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
-
           decoration: BoxDecoration(
             color: const Color(0xFF04110A).withOpacity(0.9),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: const Color.fromARGB(255, 255, 115, 0)
-                  .withOpacity(0.5),
+              color: const Color.fromARGB(255, 255, 115, 0).withOpacity(0.5),
             ),
           ),
-
           child: ListTile(
             contentPadding: const EdgeInsets.all(12),
 
-            // ไอคอนหนังสือ
             leading: const CircleAvatar(
               backgroundColor: Color(0xFF020A06),
               child: Icon(
@@ -187,7 +162,6 @@ class _ShowproductsState extends State<Showproducts> {
               ),
             ),
 
-            // ชื่อหนังสือ
             title: Text(
               book.title,
               style: const TextStyle(
@@ -197,7 +171,6 @@ class _ShowproductsState extends State<Showproducts> {
               ),
             ),
 
-            // ผู้เขียน และ ปีที่พิมพ์
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
@@ -210,6 +183,14 @@ class _ShowproductsState extends State<Showproducts> {
               ),
             ),
 
+            // ✅ ปุ่มถังขยะ
+            trailing: IconButton(
+              onPressed: () {
+                _showDeleteDialog(book.id);
+              },
+              icon: const Icon(Icons.delete_forever, color: Colors.red),
+            ),
+
             isThreeLine: true,
           ),
         );
@@ -217,20 +198,80 @@ class _ShowproductsState extends State<Showproducts> {
     );
   }
 
+  // ================== DELETE DIALOG ==================
 
-  // ================== API CALL FUNCTION ==================
+  Future<void> _showDeleteDialog(int id) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Delete Product Confirmation'),
+          content: const Text('Are you sure you want to delete this item?'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                deleteBook(id);
+              },
+              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
-  Future<void> getList() async {
+  // ================== DELETE API ==================
 
-    // เริ่มโหลดข้อมูล
-    setState(() => isLoading = true);
-
+  Future<void> deleteBook(int id) async {
     try {
-      // ดึง token จาก SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token');
 
-      // ถ้าไม่มี token ให้กลับหน้า Login
+      if (token == null) return;
+
+      final url = Uri.parse('http://10.0.2.2:3000/api/books/$id');
+
+      final response = await http.delete(
+        url,
+        headers: {
+          HttpHeaders.contentTypeHeader: 'application/json',
+          HttpHeaders.authorizationHeader: 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('ลบสำเร็จ')));
+
+        getList();
+      } else {
+        throw Exception('Delete failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  // ================== GET LIST API ==================
+
+  Future<void> getList() async {
+    setState(() => isLoading = true);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+
       if (token == null || token.isEmpty) {
         if (mounted) {
           Navigator.pushReplacementNamed(context, '/login');
@@ -238,7 +279,6 @@ class _ShowproductsState extends State<Showproducts> {
         return;
       }
 
-      // เรียก API (10.0.2.2 = localhost สำหรับ Android Emulator)
       final url = Uri.parse('http://10.0.2.2:3000/api/books');
 
       final response = await http.get(
@@ -247,41 +287,29 @@ class _ShowproductsState extends State<Showproducts> {
           HttpHeaders.contentTypeHeader: 'application/json',
           HttpHeaders.authorizationHeader: 'Bearer $token',
         },
-      ).timeout(const Duration(seconds: 10));
+      );
 
-      // ถ้าเรียกสำเร็จ
       if (response.statusCode == 200) {
-
         final decoded = jsonDecode(response.body);
 
-        // ตรวจสอบว่า API ส่ง List ตรง ๆ หรืออยู่ใน payload
-        final List list =
-            decoded is List ? decoded : decoded['payload'] ?? [];
+        final List list = decoded is List ? decoded : decoded['payload'] ?? [];
 
         setState(() {
-          // แปลง JSON เป็น BookModel
           books = list
               .map<BookModel>((json) => BookModel.fromJson(json))
               .toList();
-
           isLoading = false;
         });
-
       } else {
         throw Exception('Server Error: ${response.statusCode}');
       }
-
     } catch (e) {
-
-      // แสดงข้อความแจ้งเตือนเมื่อเกิด Error
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('เกิดข้อผิดพลาด: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('เกิดข้อผิดพลาด: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
 
       setState(() => isLoading = false);
     }
